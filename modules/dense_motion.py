@@ -52,14 +52,35 @@ class DenseMotionNetwork(nn.Module):
         identity_grid = make_coordinate_grid((h, w), type=kp_source['value'].type())
         identity_grid = identity_grid.view(1, 1, h, w, 2)
         coordinate_grid = identity_grid - kp_driving['value'].view(bs, self.num_kp, 1, 1, 2)
+        second_coordinate_grid = coordinate_grid
+        third_coordinate_grid = coordinate_grid
+        fourth_coordinate_grid = coordinate_grid
         if 'jacobian' in kp_driving:
             jacobian = torch.matmul(kp_source['jacobian'], torch.inverse(kp_driving['jacobian']))
             jacobian = jacobian.unsqueeze(-3).unsqueeze(-3)
             jacobian = jacobian.repeat(1, 1, h, w, 1, 1)
             coordinate_grid = torch.matmul(jacobian, coordinate_grid.unsqueeze(-1))
             coordinate_grid = coordinate_grid.squeeze(-1)
-
+            # UNCOMMENT THESE LINES TO TEST DIFFERENT TAYLOR APPROXIMATION TERMS
+            #second_coordinate_grid = torch.matmul(jacobian, torch.square(second_coordinate_grid.unsqueeze(-1)))
+            #second_coordinate_grid = second_coordinate_grid.squeeze(-1)
+            #second_coordinate_grid = torch.div(second_coordinate_grid, 2)
+            third_coordinate_grid = torch.matmul(jacobian, torch.pow(third_coordinate_grid.unsqueeze(-1), 3))
+            third_coordinate_grid = third_coordinate_grid.squeeze(-1)
+            third_coordinate_grid = torch.div(third_coordinate_grid, 6)
+            #fourth_coordinate_grid = torch.matmul(jacobian, torch.pow(fourth_coordinate_grid.unsqueeze(-1), 4))
+            #fourth_coordinate_grid = fourth_coordinate_grid.squeeze(-1)
+            #fourth_coordinate_grid = torch.div(fourth_coordinate_grid, 24)
+        
+        # First Order
         driving_to_source = coordinate_grid + kp_source['value'].view(bs, self.num_kp, 1, 1, 2)
+        # Second Order
+        driving_to_source = second_coordinate_grid + coordinate_grid + kp_source['value'].view(bs, self.num_kp, 1, 1, 2)
+        # Third Order
+        driving_to_source = third_coordinate_grid + coordinate_grid + kp_source['value'].view(bs, self.num_kp, 1, 1, 2)
+        # Fourth Order
+        driving_to_source = fourth_coordinate_grid + coordinate_grid + kp_source['value'].view(bs, self.num_kp, 1, 1, 2)
+
 
         #adding background feature
         identity_grid = identity_grid.repeat(bs, 1, 1, 1, 1)
